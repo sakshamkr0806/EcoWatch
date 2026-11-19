@@ -1,6 +1,6 @@
 # Frontend tests
 
-Placeholder for Member 3's component and integration tests.
+Placeholder for the component and integration tests.
 
 Suggested setup (when you are ready):
 

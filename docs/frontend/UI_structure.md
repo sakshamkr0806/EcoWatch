@@ -1,4 +1,4 @@
-# UI Structure — Member 3
+# UI Structure
 
 ## Routes
 
@@ -41,7 +41,7 @@ radius/shadow scale). Five stylesheets: variables, global (primitives), layout,
 components, pages. Responsive breakpoints at 1100px / 960px / 640px; print styles
 strip navigation for report printing.
 
-## Expected backend endpoints (Member 2)
+## Expected backend endpoints
 
 - `POST /api/auth/login`, `POST /api/auth/register`
 - `GET /api/stations`, `GET /api/stations/:id`, `POST /api/stations`

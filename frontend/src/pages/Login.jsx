@@ -42,7 +42,7 @@ export default function Login() {
       <div className="auth-card">
         <div className="auth-logo">
           <span className="brand-mark brand-mark-lg"><Icon name="drop" size={22} /></span>
-          <h1>EnvMonitor</h1>
+          <h1>EcoWatch</h1>
           <p>Air &amp; Water Quality Monitoring</p>
         </div>
 

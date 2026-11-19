@@ -26,7 +26,7 @@ export default function Sidebar({ open, onClose }) {
           <Icon name="drop" size={18} />
         </span>
         <span>
-          <strong>EnvMonitor</strong>
+          <strong>EcoWatch</strong>
           <small>Air &amp; Water Quality</small>
         </span>
         <button type="button" className="icon-btn sidebar-close" onClick={onClose} aria-label="Close menu">

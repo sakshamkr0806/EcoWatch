@@ -29,7 +29,7 @@ export default function Topbar({ onMenu }) {
         <Icon name="menu" size={20} />
       </button>
       <div className="topbar-heading">
-        <h1 className="topbar-title">{TITLES[pathname] || 'EnvMonitor'}</h1>
+        <h1 className="topbar-title">{TITLES[pathname] || 'EcoWatch'}</h1>
         <p className="topbar-date">{today}</p>
       </div>
       <div className="topbar-right">

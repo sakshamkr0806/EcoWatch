@@ -1,7 +1,7 @@
-# EnvMonitor — Frontend
+# EcoWatch — Frontend
 
 React (JavaScript / JSX) frontend for the **Environmental Monitoring System for Air and Water Quality**.
-Member 3's deliverable: dashboards, visualisations, maps, forms and frontend-backend integration.
+Dashboards, visualisations, maps, forms and frontend-backend integration.
 
 ## Tech stack
 

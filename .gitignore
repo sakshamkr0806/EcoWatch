@@ -18,6 +18,9 @@ npm-debug.log*
 # test coverage
 coverage/
 
+# vercel CLI
+.vercel/
+
 # editor / OS files
 .DS_Store
 .idea/
