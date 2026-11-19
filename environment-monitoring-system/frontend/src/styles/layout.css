@@ -1,0 +1,371 @@
+/* App shell: fixed sidebar, topbar, page canvas, auth screens. */
+.app-shell {
+  min-height: 100vh;
+}
+
+/* ---------- sidebar ---------- */
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 248px;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px;
+  z-index: 40;
+  transition: transform 0.2s ease;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #22c55e, #0ea5e9);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.brand-mark-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+}
+
+.brand strong {
+  display: block;
+  color: #fff;
+  font-size: 15.5px;
+  letter-spacing: 0.01em;
+}
+
+.brand small {
+  color: var(--sidebar-text);
+  font-size: 11px;
+}
+
+.sidebar-close {
+  margin-left: auto;
+  color: var(--sidebar-text);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 0;
+  flex: 1;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--sidebar-text);
+  font-weight: 500;
+  font-size: 14px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  text-decoration: none;
+}
+
+.nav-item.active {
+  background: var(--sidebar-active);
+  color: #fff;
+  font-weight: 600;
+}
+
+.nav-count {
+  margin-left: auto;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.sidebar-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 12px;
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #22c55e, #0ea5e9);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.avatar-light {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.user-meta strong {
+  display: block;
+  color: #fff;
+  font-size: 13.5px;
+}
+
+.user-meta small {
+  color: var(--sidebar-text);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sidebar-footer .btn-ghost {
+  color: var(--sidebar-text);
+  justify-content: flex-start;
+}
+
+.sidebar-footer .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 35;
+}
+
+/* ---------- main area ---------- */
+.main-area {
+  margin-left: 248px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.topbar-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.topbar-date {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.menu-btn {
+  display: none;
+}
+
+.page {
+  padding: 24px 28px 40px;
+  flex: 1;
+}
+
+/* ---------- page scaffolding ---------- */
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.page-title {
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.page-sub {
+  color: var(--text-soft);
+  font-size: 13.5px;
+  margin-top: 2px;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---------- filters ---------- */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+  max-width: 340px;
+}
+
+.search-box svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-soft);
+  pointer-events: none;
+}
+
+.search-box .input {
+  padding-left: 36px;
+}
+
+/* ---------- auth screens ---------- */
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background:
+    radial-gradient(900px 400px at 15% -10%, rgba(34, 197, 94, 0.16), transparent),
+    radial-gradient(900px 400px at 110% 110%, rgba(14, 165, 233, 0.16), transparent),
+    var(--bg);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 430px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 30px 28px;
+}
+
+.auth-logo {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.auth-logo .brand-mark {
+  margin-bottom: 10px;
+}
+
+.auth-logo h1 {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.auth-logo p {
+  color: var(--text-soft);
+  font-size: 12.5px;
+}
+
+.auth-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.auth-sub {
+  color: var(--text-soft);
+  font-size: 13px;
+  margin: 2px 0 14px;
+}
+
+.auth-alt {
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-soft);
+  margin-top: 18px;
+}
+
+.demo-box {
+  background: #f8faf9;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.demo-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.demo-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 960px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-md);
+  }
+
+  .main-area {
+    margin-left: 0;
+  }
+
+  .menu-btn {
+    display: inline-grid;
+  }
+
+  .page {
+    padding: 18px 16px 32px;
+  }
+
+  .topbar {
+    padding: 12px 16px;
+  }
+}
