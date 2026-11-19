@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(VIEWER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  measurements Measurement[]
+  alerts       Alert[]
+}
+
+model Station {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  type        StationType @default(AIR)
+  area        String
+  lat         Float
+  lng         Float
+  status      StationStatus @default(ACTIVE)
+  installedAt DateTime
+  description String?
+
+  airReadings AirReading[]
+  waterReadings WaterReading[]
+  alerts       Alert[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AirReading {
+  id        String   @id @default(cuid())
+  stationId String
+  recordedAt DateTime
+
+  pm25 Float
+  pm10 Float
+  no2  Float
+  so2  Float
+
+  aqi      Int    @db.Int // pre-calculated
+  dominant String // which pollutant drove the AQI
+
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model WaterReading {
+  id        String   @id @default(cuid())
+  stationId String
+  recordedAt DateTime
+
+  ph      Float
+  do_     Float // using do_ to avoid conflict with dissolved keyword
+  turbidity Float
+  tds     Float
+
+  wqi       Int    @db.Int // pre-calculated
+  scores    Json   // per-parameter scores
+
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model Alert {
+  id        String   @id @default(cuid())
+  stationId String
+  type      AlertType
+  severity  SeverityLevel
+  status    AlertStatus @default(PENDING)
+  message   String
+  resolvedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum StationType {
+  AIR
+  WATER
+  BOTH
+}
+
+enum StationStatus {
+  ACTIVE
+  MAINTENANCE
+  INACTIVE
+}
+
+enum AlertType {
+  AQI_HIGH
+  WQI_LOW
+  PARAM_EXCEEDED
+}
+
+enum SeverityLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AlertStatus {
+  PENDING
+  ACKNOWLEDGED
+  RESOLVED
+}
