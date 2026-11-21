@@ -1,66 +1,99 @@
 const express = require('express');
-const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const prisma = require('../config');
 
-const { User } = require('../models/User');
+const router = express.Router();
 
-// Register
 router.post('/register', async (req, res) => {
-  const { name, email, password, role } = req.body;
-  
   try {
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email and password required' });
-    }
-
-    const existingUser = User.findByEmail(email);
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const user = User.create({ name, email, password: hashedPassword, role: role || 'VIEWER' });
+    const { name, email, password } = req.body;
     
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    const user = await prisma.user.create({
+      data: { name, email, password: hashedPassword },
+    });
+
     const token = jwt.sign(
-      { email: user.email },
+      { userId: user.id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
-  } catch (error) {
-    res.status(500).json({ error: 'Registration failed' });
+    res.status(201).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      token,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Login
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  
   try {
-    const user = User.findByEmail(email);
-    
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const token = jwt.sign(
-      { email: user.email },
+      { userId: user.id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
-  } catch (error) {
-    res.status(500).json({ error: 'Login failed' });
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      token,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Me
-router.get('/me', require('../middleware/auth'), async (req, res) => {
-  const user = req.user;
-  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+router.get('/me', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

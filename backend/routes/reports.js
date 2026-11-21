@@ -1,96 +1,69 @@
 const express = require('express');
+const prisma = require('../config');
+const { computeAQI } = require('../utils/aqi');
+const { computeWQI } = require('../utils/wqi');
+
 const router = express.Router();
-const { PrismaClient } = require('../config');
-const fs = require('fs');
 
-async function getFilteredReadings(period, type) {
-  const prisma = new PrismaClient();
+router.post('/generate', async (req, res) => {
   try {
-    await prisma.$connect();
-    
-    const now = new Date();
-    let endTimestamp;
-    let startTimestamp;
+    const { from, to, stationId } = req.body;
+    const startDate = new Date(from);
+    const endDate = new Date(to);
 
-    if (period === 'today') {
-      endTimestamp = new Date().toDateString();
-      startTimestamp = new Date(now - 24 * 60 * 60 * 1000).toDateString();
-    } else if (period === 'yesterday') {
-      const yesterday = new Date(yesterday);
-      startTimestamp = yesterday.toDateString();
-      endTimestamp = today.toDateString();
-    } else if (period === 'week') {
-      const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toDateString();
-      startTimestamp = weekAgo;
-      endTimestamp = now.toDateString();
-    } else if (period === 'month') {
-      const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000).toDateString();
-      startTimestamp = monthAgo;
-      endTimestamp = now.toDateString();
-    } else if (period === 'all') {
-      startTimestamp = null;
-      endTimestamp = null;
+    if (!stationId) {
+      return res.status(400).json({ error: 'Station ID required' });
     }
 
-    const airReadings = await prisma.air_reading.findMany({
+    const airData = await prisma.airReading.findMany({
       where: {
-        ...(startTimestamp ? { recordedAt: { gte: new Date(startTimestamp) } } : {}),
-        ...(endTimestamp ? { recordedAt: { lte: new Date(endTimestamp) } } : {}),
-        ...(type === 'air' ? { station: { type: 'AIR' } } : {}),
+        timestamp: { gte: startDate, lte: endDate },
+        ...(stationId && { stationId }),
       },
-      orderBy: { recordedAt: 'asc' },
+      include: { station: true },
+      orderBy: [{ timestamp: 'desc' }],
     });
 
-    const waterReadings = await prisma.water_reading.findMany({
+    const waterData = await prisma.waterReading.findMany({
       where: {
-        ...(startTimestamp ? { recordedAt: { gte: new Date(startTimestamp) } } : {}),
-        ...(endTimestamp ? { recordedAt: { lte: new Date(endTimestamp) } } : {}),
-        ...(type === 'water' ? { station: { type: 'WATER' } } : {}),
+        timestamp: { gte: startDate, lte: endDate },
+        ...(stationId && { stationId }),
       },
-      orderBy: { recordedAt: 'asc' },
+      include: { station: true },
+      orderBy: [{ timestamp: 'desc' }],
     });
 
-    return { airReadings, waterReadings };
-  } finally {
-    await prisma.$disconnect();
-  }
-}
+    const dailyAQISummary = generateDailySummary(airData, computeAQI);
+    const dailyWQISummary = generateDailySummary(waterData, computeWQI);
 
-function generateCSV(data) {
-  let lines = ['timestamp,type,value,status,pollutant'];
-  
-  for (const r of data.airReadings || []) {
-    lines.push(`"${r.recordedAt.toISOString()}","AIR",${r.pm25},${r.aqi},${r.dominant}`);
-  }
-  
-  for (const r of data.waterReadings || []) {
-    let values = '';
-    if (r.ph != null && r.ph > 0) values += `ph=${r.ph} `;
-    if (r.do_ != null && r.do_ > 0) values += `do=${r.do_} `;
-    if (r.turbidity != null && r.turbidity > 0) values += `turbidity=${r.turbidity} `;
-    if (r.tds != null && r.tds > 0) values += `tds=${r.tds}`;
-    
-    const category = getWQICategory(r.wqi);
-    lines.push(`"${r.recordedAt.toISOString()}","WATER",${values},${category?.label || 'Unknown'},`);
-  }
-  
-  return lines.join('\n');
-}
-
-router.get('/export', async (req, res) => {
-  try {
-    const period = req.query.period || 'today';
-    const type = req.query.type || 'all'; // air, water, or all
-    
-    const data = await getFilteredReadings(period, type);
-    const csvContent = generateCSV(data);
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="report_${period}.csv"`);
-    res.send(csvContent);
+    res.json({
+      period: { from: startDate.toISOString(), to: endDate.toISOString() },
+      stationId,
+      airQuality: dailyAQISummary,
+      waterQuality: dailyWQISummary,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+function generateDailySummary(readings, calculateIndex) {
+  if (!readings.length) return [];
+
+  const byDate = new Map();
+  readings.forEach(r => {
+    const dateStr = r.timestamp.toISOString().split('T')[0];
+    if (!byDate.has(dateStr)) byDate.set(dateStr, []);
+    byDate.get(dateStr).push(r);
+  });
+
+  return Array.from(byDate.entries()).map(([date, dayReadings]) => ({
+    date,
+    readings: dayReadings.length,
+    avgAQI: calculateIndex(dayReadings).average,
+    maxAQI: calculateIndex(dayReadings).maximum,
+    minAQI: calculateIndex(dayReadings).minimum,
+  }));
+}
 
 module.exports = router;
