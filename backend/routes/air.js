@@ -1,61 +1,63 @@
 const express = require('express');
+const prisma = require('../config');
+const { computeAQI } = require('../utils/aqi');
+
 const router = express.Router();
-const AirReading = require('../models/AirReading');
-const Station = require('../models/Station');
 
-router.get('/latest/:stationId', async (req, res) => {
+router.post('/stations/:stationId', async (req, res) => {
   try {
-    const station = await Station.findById(req.params.stationId);
-    if (!station) return res.status(404).json({ error: 'Station not found' });
-    const reading = await AirReading.getLatestByStation(req.params.stationId);
-    if (!reading) return res.json(null);
-    res.json({ aqi: reading.aqi, dominant: reading.dominant, ...POLLUTANTS[reading.dominant] });
+    const { stationId } = req.params;
+    const { timestamp, pollutant, value } = req.body;
+
+    if (!timestamp || !pollutant || !value) {
+      return res.status(400).json({ error: 'Timestamp, pollutant, and value required' });
+    }
+
+    const station = await prisma.station.findUnique({ where: { id: stationId } });
+    if (!station) {
+      return res.status(404).json({ error: 'Station not found' });
+    }
+
+    const aqi = computeAQI(pollutant, value);
+
+    const reading = await prisma.airReading.create({
+      data: { timestamp, pollutant, value, aqi, stationId },
+    });
+
+    res.status(201).json({ ...reading, stationName: station.name, stationType: station.stationType });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/', async (req, res) => {
+router.get('/stations/:stationId', async (req, res) => {
   try {
-    const station = await Station.findById(req.body.stationId);
-    if (!station) return res.status(404).json({ error: 'Station not found' });
-    
-    const data = {
-      ...req.body,
-      recordedAt: req.body.recordedAt || new Date(),
-    };
+    const { stationId } = req.params;
 
-    const reading = await AirReading.create(data);
-    res.status(201).json(reading);
+    const readings = await prisma.airReading.findMany({
+      where: { stationId },
+      include: { station: true },
+      orderBy: { timestamp: 'desc' },
+      limit: 100,
+    });
+
+    res.json(readings);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/:stationId', async (req, res) => {
+router.get('/stations/:stationId/latest', async (req, res) => {
   try {
-    const readings = await AirReading.findByStationId(req.params.stationId);
-    res.json(readings || []);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+    const { stationId } = req.params;
 
-router.put('/:id', async (req, res) => {
-  try {
-    const reading = await AirReading.findById(req.params.id);
-    if (!reading) return res.status(404).json({ error: 'Reading not found' });
-    const updated = await AirReading.update(req.params.id, req.body);
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+    const reading = await prisma.airReading.findFirst({
+      where: { stationId },
+      include: { station: true },
+      orderBy: { timestamp: 'desc' },
+    });
 
-router.delete('/:id', async (req, res) => {
-  try {
-    await AirReading.delete(req.params.id);
-    res.status(204).send();
+    res.json(reading);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
