@@ -19,89 +19,77 @@ enum AlertSeverity {
 }
 
 model User {
-  id       String    @id @default(cuid())
-  name     String?
-  email    String    @unique
-  password String    @map("password_hash")
-  role     Role      @default(VIEWER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        Int       @id @default(autoincrement())
+  name      String    @db("name")
+  email     String    @unique
+  password  String    @db("password")
+  role      Role      @default(OPERATOR) @db("role")
+  createdAt DateTime @default(now()) @db("created_at")
+  updatedAt DateTime @updatedAt @db("updated_at")
 
-  stations Station[] @relation("UserStations")
+  stations Station[] @relation("UserStations", fields: [userId], references: [id])
+  
+  alerts Alert[] @relation("UserAlerts", fields: [userId], references: [id])
+  
+  reports Report[] @relation("UserReports", fields: [userId], references: [id])
 }
 
 model Station {
-  id          String   @id @default(cuid())
-  name        String
-  type        StationType @default(AIR)
-  location    String?
-  isActive    Boolean  @default(true)
-
-  userId      String?
-  user        User?    @relation("UserStations", fields: [userId], references: [id])
-
-  airReadings AirReading[]
-  waterReadings WaterReading[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([type, isActive])
-}
-
-enum StationType {
-  AIR
-  WATER
-  COMBINED
+  id            Int       @id @default(autoincrement())
+  name          String
+  location      String    @db("location")
+  user          User      @relation("UserStations", fields: [userId], references: [id], onDelete: Cascade)
+  userId        Int       
+  createdAt     DateTime  @default(now()) @db("created_at")
+  
+  readings AirReading[] @relation("StationAirReadings", fields: [stationId], references: [id])
+  readings WaterReading[] @relation("StationWaterReadings", fields: [stationId], references: [id])
 }
 
 model AirReading {
-  id          String    @id @default(cuid())
-  stationId   String
-  pm25        Float?
-  pm10        Float?
-  no2         Float?
-  so2         Float?
-  aqi         Int?
-  dominant    String?
-  recordedAt  DateTime  @default(now())
-
-  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
-
-  @@index([stationId, recordedAt])
+  id              Int       @id @default(autoincrement())
+  station         Station   @relation("StationAirReadings", fields: [stationId], references: [id])
+  stationId       Int       
+  pm25            Float     @db("pm2_5") @db.Float8
+  pm10            Float
+  co2             Float?    @db.co2
+  temperature     Float     @db.temperature @db.float4
+  humidity        Float     @db.humidity @db.float4
+  timestamp       DateTime  @default(now()) @db("timestamp")
+  isVerified      Boolean   @default(false) @db("is_verified")
 }
 
 model WaterReading {
-  id          String   @id @default(cuid())
-  stationId   String
-  ph          Float?
-  do_         Float?   @map("do")
-  turbidity   Float?
-  tds         Float?
-  wqi         Int?
-  recordedAt  DateTime @default(now())
-
-  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
-
-  @@index([stationId, recordedAt])
+  id                Int       @id @default(autoincrement())
+  station           Station   @relation("StationWaterReadings", fields: [stationId], references: [id])
+  stationId         Int       
+  ph                Float     @db.float4
+  turbidity         Float?    @db.float4
+  dissolvedOxygen   Float?    @db.float4
+  conductivity      Float?    @db.float4
+  timestamp         DateTime  @default(now()) @db("timestamp")
 }
 
 model Alert {
-  id        String   @id @default(cuid())
-  stationId String
-  type      String
-  severity  AlertSeverity
-  message   String
-  status    AlertStatus @default(PENDING)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([stationId, status])
+  id              Int       @id @default(autoincrement())
+  userId          Int       
+  level           String    @db("level")
+  type            String    @db("type")
+  message         String
+  stationId       Int
+  station         Station   @relation("UserAlerts", fields: [stationId], references: [id])
+  createdAt       DateTime  @default(now()) @db("created_at")
 }
 
-enum AlertStatus {
-  PENDING
-  ACKNOWLEDGED
-  RESOLVED
+model Report {
+  id          Int       @id @default(autoincrement())
+  userId      Int       
+  title       String    @db("title")
+  summary     String    @db("summary")
+  details     String?   @db("details")
+  createdAt   DateTime  @default(now()) @db("created_at")
+  user        User      @relation("UserReports", fields: [userId], references: [id])
 }
+
+// Custom column names for database compatibility (e.g., pm2_5 -> pm25)
+// This maps Prisma's camelCase to PostgreSQL snake_case columns with underscores removed where needed
