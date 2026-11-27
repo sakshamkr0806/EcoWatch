@@ -3,8 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
 }
 
 // ============================================================================
@@ -191,11 +190,18 @@ model parameter {
   description     String?
   isactive        Boolean    @default(true)
 
-  aqibreakpoints aqibreakpoint[]
-  indexresults IndexResult[]
-  measurements measurement[]
+  /// One-to-many: Parameters can have multiple AQI breakpoints
+  aqibreakpoints aqibreakpoint[] @relation("fk_parameter_aqi_breakpoint")
+
+  /// Many-to-many: Index results are composed of multiple parameters
+  indexresults IndexResult[] @relation("fk_indexresult_parameter")
+
+  /// One-to-many: Parameters produce measurements
+  measurements measurement[] @relation("fk_parameter_measurement")
+
   units unit[]
-  wqiparameterconfigs WQiParamaterConfig[]
+  /// One-to-many: Multiple WQI parameter configs can reference the same parameter
+  wqiparameterconfigs WQiParamaterConfig[] @relation("fk_parameter_wqiconfig")
 }
 
 
@@ -217,8 +223,6 @@ model User {
   userroles           UserRole[]
   stationassignments  StationAssignment[]
   auditlogs           AuditLog[]
-  recordedMeasurements measurement[] @relation("fk_measurement_user", fields: [id], references: [id])
-  uploadedBatches MeasurementBatch[] @relation(fields: [id], references: [id])
 
   /// Admin users can acknowledge alerts (many-to-many)
   acknowledgedAlerts Alert[] @relation("alert_acknowledgedByUser")
@@ -312,7 +316,9 @@ model aqibreakpoint {
   indexhigh            Int
 
   methodversions IndexMethodVersion @relation("fk_method_aqi", fields: [methodversionid], references: [id])
-  parameters     parameter[] @relation("fk_parameter_aqi_breakpoint")
+
+  /// Many-to-many: This breakpoint applies to multiple parameters (one direction of the relation)
+  /// The opposite direction is defined in parameter model as "aqibreakpoints"
 }
 
 // ============================================================================
@@ -353,14 +359,14 @@ model Alert {
   /// Alert model - User can acknowledge alerts (many-to-many), operator resolves (one-to-many)
   stations monitoringstation @relation(fields: [stationid], references: [id])
 
-  /// Measurement that triggered this alert
-  measurementToMeasurementId measurement? @relation("fk_alert_measurement", fields: [measurementid], references: [id])
+  /// Parameter that triggered this alert (nullable - multi-parameter rules, opposite of Alert.parameters)
+  parameters parameter[] @relation("fk_alert_measurement")
 
   /// Index result that triggered this alert
   indexresults IndexResult? @relation(fields: [indexresultid], references: [id])
 
-  /// User acknowledged this alert (many-to-many relation)
-  acknowledgedByUser User[] @relation("alert_acknowledgedByUser", fields: [id], references: [id])
+  /// User acknowledged this alert (many-to-many relation, opposite of Alert.acknowledgedByUser)
+  acknowledgedByUser User[] @relation("alert_acknowledgedByUser")
 
   /// Operator resolved this alert (one-to-many, nullable)
   resolvedByUser User? @relation("alert_resolvedByUser", fields: [id], references: [id])
@@ -424,7 +430,6 @@ model IndexResult {
   parameters parameter?        @relation("fk_index_result_limiting_param", fields: [limitingparameterid], references: [id])
 
   indexresultmeasurements IndexResultMeasurement[]
-  alerts Alert[] @relation("fk_alert_measurement")
 
   /// Parameter that was used to compute this AQI/WQI value (the limiting parameter)
   wqiparameterconfigs WQiParamaterConfig[] @relation("wqiparameterconfig_idToIndexResult")
@@ -454,7 +459,6 @@ model MeasurementBatch {
   completedat     DateTime?
 
   uploaders        User   @relation(fields: [uploadedbyuserid], references: [id])
-  measurements measurement[]
 }
 
 // ============================================================================
@@ -470,7 +474,7 @@ model WQiParamaterConfig {
   weight          Decimal
 
   methodversions IndexMethodVersion @relation("fk_wqi_method", fields: [methodversionid], references: [id])
-  parameters     parameter          @relation(fields: [parameterid], references: [id])
+  parameters     parameter @relation("fk_wqiParamater_parameter")
 
   indexresultwqiconfigs WQIParamaterConfigResult[]
 }
