@@ -179,6 +179,7 @@ function createMeasurementRouter({ domain }) {
     const where = {
       stationid: station.id,
       parameters: { is: { domain: parameterDomain } },
+      validationstatus: 'ACCEPTED',
       ...(parameter && { parameterid: parameter.id }),
       ...(Object.keys(measuredat).length && { measuredat }),
     };

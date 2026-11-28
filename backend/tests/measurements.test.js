@@ -73,6 +73,7 @@ const prismaMock = {
         const station = stations.get(record.stationid);
         const parameter = parameters.find((entry) => entry.id === record.parameterid);
         return record.stationid === args.where.stationid && parameter?.domain === args.where.parameters.is.domain &&
+          (!args.where.validationstatus || record.validationstatus === args.where.validationstatus) &&
           (!args.where.parameterid || record.parameterid === args.where.parameterid) &&
           (!args.where.measuredat?.gte || record.measuredat >= args.where.measuredat.gte) &&
           (!args.where.measuredat?.lte || record.measuredat <= args.where.measuredat.lte) && Boolean(station);
@@ -209,6 +210,7 @@ async function run() {
   assert.equal(history.body[0].wqi, 42);
   assert.equal(lastFindManyArgs.take, 10);
   assert.equal(lastFindManyArgs.where.parameters.is.domain, 'WATER');
+  assert.equal(lastFindManyArgs.where.validationstatus, 'ACCEPTED');
 
   const badPagination = await request(app).get(`/api/air/history?stationId=${STATION_AIR}&page=0`).set('Authorization', admin);
   assert.equal(badPagination.status, 400);
@@ -221,6 +223,100 @@ async function run() {
   const latestWithIndex = await request(app).get(`/api/air/latest?stationId=${STATION_AIR}`).set('Authorization', operator);
   assert.equal(latestWithIndex.body.aqi, 64);
   assert.equal(latestWithIndex.body.aqiCategory, 'MODERATE');
+
+  const statusRows = [
+    { id: 'air-accepted', stationid: STATION_AIR, parameterid: PARAM_PM25, value: 101, measuredat: new Date('2026-02-04T00:00:00.000Z'), source: 'SENSOR', validationstatus: 'ACCEPTED' },
+    { id: 'air-flagged', stationid: STATION_AIR, parameterid: PARAM_PM25, value: 102, measuredat: new Date('2026-02-04T00:01:00.000Z'), source: 'SENSOR', validationstatus: 'FLAGGED' },
+    { id: 'air-rejected', stationid: STATION_AIR, parameterid: PARAM_PM25, value: 103, measuredat: new Date('2026-02-04T00:02:00.000Z'), source: 'SENSOR', validationstatus: 'REJECTED' },
+    { id: 'water-accepted', stationid: STATION_WATER, parameterid: PARAM_PH, value: 201, measuredat: new Date('2026-02-04T00:00:00.000Z'), source: 'SENSOR', validationstatus: 'ACCEPTED' },
+    { id: 'water-flagged', stationid: STATION_WATER, parameterid: PARAM_PH, value: 202, measuredat: new Date('2026-02-04T00:01:00.000Z'), source: 'SENSOR', validationstatus: 'FLAGGED' },
+    { id: 'water-rejected', stationid: STATION_WATER, parameterid: PARAM_PH, value: 203, measuredat: new Date('2026-02-04T00:02:00.000Z'), source: 'SENSOR', validationstatus: 'REJECTED' },
+  ];
+  records.push(...statusRows);
+
+  for (const { domain, stationId, parameter, acceptedValue } of [
+    { domain: 'air', stationId: STATION_AIR, parameter: 'pm25', acceptedValue: 101 },
+    { domain: 'water', stationId: STATION_WATER, parameter: 'ph', acceptedValue: 201 },
+  ]) {
+    for (const historyPath of [
+      `/api/${domain}/history?stationId=${stationId}&from=2026-02-04T00:00:00.000Z&to=2026-02-04T00:03:00.000Z&validationStatus=FLAGGED`,
+      `/api/${domain}/stations/${stationId}?from=2026-02-04T00:00:00.000Z&to=2026-02-04T00:03:00.000Z&parameter=${parameter}`,
+    ]) {
+      const acceptedOnlyHistory = await request(app)
+        .get(historyPath)
+        .set('Authorization', operator);
+      assert.equal(acceptedOnlyHistory.status, 200);
+      assert.equal(lastFindManyArgs.where.validationstatus, 'ACCEPTED');
+      assert.equal(lastFindManyArgs.where.parameters.is.domain, domain.toUpperCase());
+      assert.deepEqual(acceptedOnlyHistory.body.map((row) => row[parameter]), [acceptedValue]);
+      assert.ok(acceptedOnlyHistory.body[0].id);
+      assert.equal(acceptedOnlyHistory.body[0].stationId, stationId);
+      assert.ok(acceptedOnlyHistory.body[0].recordedAt);
+    }
+
+    for (const latestPath of [
+      `/api/${domain}/latest?stationId=${stationId}&from=2026-02-04T00:00:00.000Z&to=2026-02-04T00:03:00.000Z&validationStatus=REJECTED`,
+      `/api/${domain}/stations/${stationId}/latest?from=2026-02-04T00:00:00.000Z&to=2026-02-04T00:03:00.000Z`,
+    ]) {
+      const acceptedOnlyLatest = await request(app)
+        .get(latestPath)
+        .set('Authorization', admin);
+      assert.equal(acceptedOnlyLatest.status, 200);
+      assert.equal(lastFindManyArgs.where.validationstatus, 'ACCEPTED');
+      assert.equal(lastFindManyArgs.where.parameters.is.domain, domain.toUpperCase());
+      assert.equal(acceptedOnlyLatest.body[parameter], acceptedValue);
+      assert.equal(acceptedOnlyLatest.body.stationId, stationId);
+    }
+
+    const nonAcceptedWindowHistory = await request(app)
+      .get(`/api/${domain}/history?stationId=${stationId}&from=2026-02-04T00:01:00.000Z&to=2026-02-04T00:03:00.000Z`)
+      .set('Authorization', admin);
+    assert.equal(nonAcceptedWindowHistory.status, 200);
+    assert.equal(lastFindManyArgs.where.validationstatus, 'ACCEPTED');
+    assert.deepEqual(nonAcceptedWindowHistory.body, []);
+
+    const nonAcceptedWindowLatest = await request(app)
+      .get(`/api/${domain}/latest?stationId=${stationId}&from=2026-02-04T00:01:00.000Z&to=2026-02-04T00:03:00.000Z`)
+      .set('Authorization', admin);
+    assert.equal(nonAcceptedWindowLatest.status, 200);
+    assert.equal(lastFindManyArgs.where.validationstatus, 'ACCEPTED');
+    assert.equal(nonAcceptedWindowLatest.body, null);
+  }
+
+  const unauthHistory = await request(app).get(`/api/air/history?stationId=${STATION_AIR}`);
+  assert.equal(unauthHistory.status, 401);
+  const unassignedHistory = await request(app).get(`/api/water/history?stationId=${STATION_UNASSIGNED}`).set('Authorization', operator);
+  assert.equal(unassignedHistory.status, 403);
+  const unassignedLatest = await request(app).get(`/api/air/stations/${STATION_UNASSIGNED}/latest`).set('Authorization', operator);
+  assert.equal(unassignedLatest.status, 403);
+
+  const firstPage = await request(app)
+    .get(`/api/air/history?stationId=${STATION_AIR}&from=2026-02-04T00:00:00.000Z&to=2026-02-04T00:03:00.000Z&parameter=pm25&limit=1&page=1`)
+    .set('Authorization', admin);
+  assert.equal(firstPage.status, 200);
+  assert.equal(lastFindManyArgs.where.validationstatus, 'ACCEPTED');
+  assert.equal(lastFindManyArgs.where.parameterid, PARAM_PM25);
+  assert.equal(lastFindManyArgs.skip, 0);
+  assert.equal(lastFindManyArgs.take, 1);
+  assert.deepEqual(firstPage.body.map((row) => row.pm25), [101]);
+
+  const paginatedHistory = await request(app)
+    .get(`/api/air/history?stationId=${STATION_AIR}&from=2026-02-04T00:00:00.000Z&to=2026-02-04T00:03:00.000Z&parameter=pm25&limit=1&page=2`)
+    .set('Authorization', admin);
+  assert.equal(paginatedHistory.status, 200);
+  assert.deepEqual(paginatedHistory.body, []);
+  assert.equal(lastFindManyArgs.skip, 1);
+  assert.equal(lastFindManyArgs.take, 1);
+
+  assert.deepEqual(
+    records.filter((row) => row.validationstatus !== 'ACCEPTED').map((row) => [row.id, row.validationstatus]),
+    [
+      ['air-flagged', 'FLAGGED'],
+      ['air-rejected', 'REJECTED'],
+      ['water-flagged', 'FLAGGED'],
+      ['water-rejected', 'REJECTED'],
+    ]
+  );
 
   console.log('Measurement route tests passed.');
 }
