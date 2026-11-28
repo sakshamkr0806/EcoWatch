@@ -78,13 +78,13 @@ export default function Alerts() {
         <div className="alert-list">
           {filtered.map((a) => (
             <div key={a.id} className="card alert-card" style={{ borderLeft: `4px solid ${SEVERITY_COLORS[a.severity]}` }}>
-              <div className={`alert-icon ${a.type === 'AIR' ? 'tile-blue' : 'tile-cyan'}`}>
-                <Icon name={a.type === 'AIR' ? 'wind' : 'drop'} size={20} />
+              <div className={`alert-icon ${a.type === 'AIR' ? 'tile-blue' : a.type === 'WATER' ? 'tile-cyan' : ''}`}>
+                <Icon name={a.type === 'AIR' ? 'wind' : a.type === 'WATER' ? 'drop' : 'alert'} size={20} />
               </div>
               <div className="alert-body">
                 <div className="alert-top">
                   <Badge variant={severityVariant(a.severity)}>{a.severity}</Badge>
-                  <Badge variant={typeVariantSafe(a.type)}>{a.type === 'AIR' ? 'Air quality' : 'Water quality'}</Badge>
+                  <Badge variant={typeVariantSafe(a.type)}>{a.type === 'AIR' ? 'Air quality' : a.type === 'WATER' ? 'Water quality' : 'Unknown domain'}</Badge>
                   <Badge variant={statusVariant(a.status)}>{a.status}</Badge>
                 </div>
                 <p className="alert-message">{a.message}</p>
@@ -114,5 +114,5 @@ export default function Alerts() {
 }
 
 function typeVariantSafe(type) {
-  return type === 'AIR' ? 'blue' : 'cyan';
+  return type === 'AIR' ? 'blue' : type === 'WATER' ? 'cyan' : 'gray';
 }

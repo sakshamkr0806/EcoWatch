@@ -6,10 +6,11 @@ dist/
 dist-ssr/
 build/
 
-# env files (keep .env.example)
+# env files (keep examples)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
 
 # logs
 *.log
@@ -26,3 +27,7 @@ coverage/
 .idea/
 .vscode/
 *.swp
+
+# Local TLS private keys
+/backend/private.key
+/backend/certs/private.key

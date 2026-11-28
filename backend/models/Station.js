@@ -1,35 +1,19 @@
 const prisma = require('../config');
 
-exports.create = async (data) => {
-  return await prisma.station.create({ data });
-};
+exports.create = async (data) => prisma.monitoringstation.create({ data });
 
-exports.findById = async (id) => {
-  return await prisma.station.findUnique({ where: { id } });
-};
+exports.findById = async (id) => prisma.monitoringstation.findUnique({ where: { id } });
 
-exports.findByUser = async (userId) => {
-  return await prisma.station.findMany({ 
-    where: { userId },
-    include: { airReadings: true, waterReadings: true } 
-  });
-};
+exports.findByUser = async (userId) => prisma.monitoringstation.findMany({
+  where: { stationassignments: { some: { userid: userId, endedat: null } } },
+});
 
-exports.findAll = async () => {
-  return await prisma.station.findMany();
-};
+exports.findAll = async (args = {}) => prisma.monitoringstation.findMany(args);
 
-exports.update = async (id, data) => {
-  return await prisma.station.update({ where: { id }, data });
-};
+exports.update = async (id, data) => prisma.monitoringstation.update({ where: { id }, data });
 
-exports.delete = async (id) => {
-  return await prisma.station.delete({ where: { id } });
-};
+exports.delete = async (id) => prisma.monitoringstation.delete({ where: { id } });
 
-exports.findByType = async (type) => {
-  return await prisma.station.findMany({ 
-    where: { type, isActive: true },
-    include: { airReadings: true, waterReadings: true } 
-  });
-};
+exports.findByType = async (stationtype) => prisma.monitoringstation.findMany({
+  where: { stationtype, status: 'ACTIVE' },
+});

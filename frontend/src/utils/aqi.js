@@ -120,6 +120,9 @@ export function computeAQI(reading) {
 }
 
 export function getAQICategory(aqi) {
+  if (aqi == null || (typeof aqi === 'string' && aqi.trim() === '')) {
+    return { label: 'Unavailable', min: null, max: null, color: '#64748b', advice: 'AQI is unavailable.' };
+  }
   const safe = Number(aqi) || 0;
   return AQI_SCALE.find((z) => safe >= z.min && safe <= z.max) || AQI_SCALE[AQI_SCALE.length - 1];
 }

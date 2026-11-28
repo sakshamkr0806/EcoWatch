@@ -4,31 +4,65 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-/// Enum for user roles in the system
+// ============================================================================
+// ENUM TYPES (These must be placed before model definitions)
+// ============================================================================
+
+enum stationtype {
+  AIR
+  WATER
+  BOTH
+}
+
+enum statetype {
+  STATE
+  UNION_TERRITORY
+}
+
+enum stationstatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+/// Enum for user role names
 enum UserRole {
   ADMIN
   OPERATOR
 }
 
-/// Enum for alert severity levels
-enum AlertSeverityEnum {
+enum parameterdomain {
+  AIR
+  WATER
+}
+
+enum alertseverity {
   LOW
   MEDIUM
   HIGH
   CRITICAL
 }
 
-/// Enum for alert status
-enum AlertStatusEnum {
+enum alertstatus {
   OPEN
   ACKNOWLEDGED
   RESOLVED
+  SUPPRESSED
 }
 
-/// Enum for AQI/WQI index categories
-enum IndexCategoryEnum {
+enum alertRuletype {
+  AQI_THRESHOLD
+  POLLUTANT_THRESHOLD
+  WQI_THRESHOLD
+  WATER_PARAMETER_LIMIT
+  SUSPICIOUS_MEASUREMENT
+  STATION_INACTIVE
+}
+
+enum indexcategory {
   GOOD
   MODERATE
   POOR
@@ -37,74 +71,103 @@ enum IndexCategoryEnum {
   HEALTH_ALERT
 }
 
+/// Enum for index method types (AQI or WQI)
+enum indextype {
+  AQI
+  WQI
+}
+
+enum measurementsource {
+  MANUAL
+  CSV
+  API
+  SENSOR
+}
+
+enum validationstatus {
+  ACCEPTED
+  FLAGGED
+  REJECTED
+}
+
+enum datastatus {
+  SUFFICIENT
+  INSUFFICIENT
+}
+
+enum importstatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
 // ============================================================================
-// COUNTRY TABLE
+// GEOGRAPHIC TABLES (PostgreSQL Geography Types)
 // ============================================================================
+
 model country {
-  id     String @id @default(uuid())
-  name   String @unique
+  id   String @id @default(uuid())
+  name String @unique
+  // Note: This is a geography field in PostgreSQL, but mapped as String here
+  // The actual geometry is handled by PG native types
 
   states State[]
 }
 
-// ============================================================================
-// STATE TABLE (Quoted because existing data has "State" as ID in country table)
-// ============================================================================
 model State {
-  id          String    @id @default(uuid())
-  countryid   String
-  name        String    @unique
-  code        String?   @unique
-  type        statetype
+  id         String    @id @default(uuid())
+  countryid  String
+  name       String    @unique
+  code       String?   @unique
+  type       statetype
 
-  states     State[]
-  districts  district[]
-  country    country   @relation(fields: [countryid], references: [id])
+  country   country    @relation(fields: [countryid], references: [id])
+  districts district[]
 }
 
-// ============================================================================
-// DISTRICT TABLE
-// ============================================================================
 model district {
-  id          String    @id @default(uuid())
-  stateid     String
-  name        String    @unique
-  code        String?
+  id      String  @id @default(uuid())
+  stateid String
+  name    String  @unique
+  code    String?
 
-  states State   @relation(fields: [stateid], references: [id], onDelete: Cascade)
+  state               State                 @relation(fields: [stateid], references: [id])
   monitoringstations monitoringstation[]
 }
 
 // ============================================================================
 // MONITORING STATION TABLE
 // ============================================================================
-model monitoringstation {
-  id             String   @id @default(uuid())
-  districtid     String
-  stationcode    String   @unique
-  name           String
-  stationtype    stationtype  @default(AIR)
-  latitude       Decimal
-  longitude      Decimal
-  locality       String?
-  address        String?
-  postalcode     String?
-  status         stationstatus @default(ACTIVE)
-  installedat    DateTime?
-  createdat      DateTime @default(now())
-  updatedat      DateTime
 
-  districts district   @relation(fields: [districtid], references: [id], onDelete: Cascade)
-  users UserRole[]
-  alerts Alert[]
-  indexresults IndexResult[]
-  measurements measurement[]
+model monitoringstation {
+  id          String        @id @default(uuid())
+  districtid  String
+  stationcode String        @unique
+  name        String
+  stationtype stationtype   @default(AIR)
+  latitude    Decimal
+  longitude   Decimal
+  locality    String?
+  address     String?
+  postalcode  String?
+  status      stationstatus @default(ACTIVE)
+  installedat DateTime?
+  createdat   DateTime      @default(now())
+  updatedat   DateTime
+
+  districts          district           @relation(fields: [districtid], references: [id])
+  alerts             Alert[]
+  indexresults       IndexResult[]
+  measurements       measurement[]
   stationassignments StationAssignment[]
 }
 
 // ============================================================================
 // UNIT TABLE
 // ============================================================================
+
 model unit {
   id          String @id @default(uuid())
   code        String @unique
@@ -115,246 +178,210 @@ model unit {
 }
 
 // ============================================================================
-// PARAMETER TABLE (for air/water quality parameters like PM25, O3, etc.)
+// PARAMETER TABLE (for air/water quality parameters)
 // ============================================================================
-model parameter {
-  id           String     @id @default(uuid())
-  code         String     @unique
-  name         String
-  domain       parameterdomain  @default(AIR)
-  unitid       String
-  description  String?
-  isactive     Boolean    @default(true)
 
-  aqibreakpoints aqibreakpoint[]
-  alertrules alertrule[]
-  indexresults IndexResult[]
-  measurements measurement[]
-  units      unit         @relation(fields: [unitid], references: [id])
-  wqiparameterconfigs WQiParamaterConfig[]
+model parameter {
+  id          String          @id @default(uuid())
+  code        String          @unique
+  name        String
+  domain      parameterdomain @default(AIR)
+  unitid      String
+  description String?
+  isactive    Boolean         @default(true)
+
+  /// One-to-many: Parameters can have multiple AQI breakpoints
+  aqibreakpoints aqibreakpoint[] @relation("fk_parameter_aqi_breakpoint")
+
+  /// One-to-many: Parameter can be the limiting parameter for index results
+  indexresults IndexResult[] @relation("fk_index_result_limiting_param")
+
+  /// One-to-many: Parameters produce measurements
+  measurements measurement[] @relation("fk_parameter_measurement")
+
+  units               unit              @relation(fields: [unitid], references: [id])
+  /// One-to-many: Multiple WQI parameter configs can reference the same parameter
+  wqiparameterconfigs WQiParamaterConfig[] @relation("fk_parameter_wqiconfig")
+  alertRules          alertRule[]
 }
 
 // ============================================================================
 // USER & AUTHENTICATION TABLES
 // ============================================================================
 
-/// Enum for station type
-/// Enum for station type
-enum stationtype {
-  AIR
-  WATER
-  BOTH
-}
-
-/// Enum for user role names
-enum statetype {
-  STATE
-  UNION_TERRITORY
-}
-
-/// Enum for station status
-enum stationstatus {
-  ACTIVE
-  INACTIVE
-  MAINTENANCE
-}
-
 model User {
-  id            String @id @default(uuid())
-  email         String @unique
-  password      String?
-  fullname      String?
-  avatarurl     String?
-  isactive      Boolean @default(true)
-  createdat     DateTime @default(now())
-  updatedat     DateTime
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String?
+  fullname  String?
+  avatarurl String?
+  isactive  Boolean  @default(true)
+  createdat DateTime @default(now())
+  updatedat DateTime
 
-  oauthaccounts oauthaccount[]
-  userroles UserRole[]
+  oauthaccounts      oauthaccount[]
+  userroles          UserRoles[]         @relation("user_role_assignments")
+  assignedUserRoles  UserRoles[]         @relation("user_role_assigner")
   stationassignments StationAssignment[]
-  measurements measurement[]
-  auditlogs AuditLog[]
-  alerts Alert[]
+  assignedStationAssignments StationAssignment[] @relation("station_assignment_assigner")
+  auditlogs          AuditLog[]
 
-  /// Admin users can acknowledge alerts
-  acknowledgedAlerts Alert[] @relation("alert_acknowledgedbyuseridToUser", fields: [acknowledgedbyuserid], references: [id])
+  /// Admin users can acknowledge alerts (many-to-many)
+  acknowledgedAlerts Alert[] @relation("alert_acknowledgedByUser")
 
-  /// Operator users can resolve alerts
-  resolvedAlerts Alert[] @relation("alert_resolvedbyuseridToUser", fields: [resolvedbyuserid], references: [id])
+  /// Operator users can resolve alerts (one-to-many, nullable)
+  resolvedAlerts Alert[] @relation("alert_resolvedByUser")
+
+  recordedMeasurements measurement[]      @relation("fk_measurement_user")
+  uploadedBatches      MeasurementBatch[]
 }
 
 /// OAuth account links (for provider-based authentication)
 model oauthaccount {
-  id            String   @id @default(uuid())
-  userid        String
-  provider      String
+  id                String   @id @default(uuid())
+  userid            String
   provideraccountid String
-  createdat     DateTime
+  createdat         DateTime
 
   users User @relation(fields: [userid], references: [id], onDelete: Cascade)
-
-  @@unique([provider, provideraccountid])
 }
 
 /// Role definition table
-model role {
+model Role {
   id          String   @id @default(uuid())
-  name        String   @unique
+  name        UserRole
   description String?
 
-  userroles UserRole[]
+  userroles UserRoles[]
 }
 
 /// Many-to-many join table for User-Role assignments
-model userrole {
-  userid     String
-  roleid     String
-  assignedat DateTime @default(now())
+model UserRoles {
+  id               String   @id @default(uuid())
+  userid           String
+  roleid           String
+  assignedat       DateTime @default(now())
   assignedbyuserid String?
 
-  users User @relation("userrole_useridToUser", fields: [userid], references: [id], onDelete: Cascade)
-  roles role @relation("userrole_roleidToRole", fields: [roleid], references: [id], onDelete: Cascade)
+  user       User  @relation("user_role_assignments", fields: [userid], references: [id])
+  role       Role  @relation(fields: [roleid], references: [id])
+  assignedby User? @relation("user_role_assigner", fields: [assignedbyuserid], references: [id])
 
-  @@id([userid, roleid])
+  @@unique([userid, roleid])
 }
 
 /// Many-to-many join table for Station-User assignments
 model StationAssignment {
-  id              String  @id @default(uuid())
-  userid          String
-  stationid       String
+  id               String    @id @default(uuid())
+  userid           String
+  stationid        String
   assignedbyuserid String?
-  assignedat      DateTime @default(now())
-  endedat         DateTime?
+  assignedat       DateTime  @default(now())
+  endedat          DateTime?
 
-  stations monitoringstation @relation("StationAssignment.monitoringstation", fields: [stationid], references: [id])
-  users User   @relation("StationAssignment.userId", fields: [userid], references: [id])
+  stations monitoringstation @relation(fields: [stationid], references: [id])
+  users    User              @relation(fields: [userid], references: [id])
+  assignedby User?           @relation("station_assignment_assigner", fields: [assignedbyuserid], references: [id])
 }
 
 // ============================================================================
 // AQI/WQI BREAKPOINTS & CONFIGURATIONS
 // ============================================================================
 
-/// Enum for index method types (AQI or WQI)
-enum indextype {
-  AQI
-  WQI
-}
-
 model IndexMethodVersion {
-  id           String @id @default(uuid())
+  id           String    @id @default(uuid())
   indextype    indextype
   version      String
   methodname   String
   description  String?
   referenceurl String?
-  isactive     Boolean @default(false)
+  isactive     Boolean   @default(false)
   createdat    DateTime
 
-  aqibreakpoints          aqibreakpoint[]
+  aqibreakpoints          aqibreakpoint[]          @relation("fk_method_aqi")
   indexcategorythresholds IndexCategoryThreshold[]
   indexresults            IndexResult[]
-  wqiparameterconfigs     WQiParamaterConfig[]
+  wqiparameterconfigs     WQiParamaterConfig[]     @relation("fk_wqi_method")
 }
 
 model IndexCategoryThreshold {
-  id             String @id @default(uuid())
+  id              String   @id @default(uuid())
   methodversionid String
-  category       String
-  minimumvalue   Decimal
-  maximumvalue   Decimal?
-  displayorder   Int
+  category        String
+  minimumvalue    Decimal
+  maximumvalue    Decimal?
+  displayorder    Int
 
   methodversions IndexMethodVersion @relation(fields: [methodversionid], references: [id])
 }
 
 model aqibreakpoint {
-  id               String @id @default(uuid())
-  methodversionid  String
-  parameterid      String
-  averagingperiod  String
-  concentrationlow Decimal
-  concentrationhigh  Decimal
+  id                String  @id @default(uuid())
+  methodversionid   String
+  parameterid       String
+  averagingperiod   String
+  concentrationlow  Decimal
+  concentrationhigh Decimal
   indexlow          Int
   indexhigh         Int
 
-  methodversions IndexMethodVersion @relation(fields: [methodversionid], references: [id])
-  parameters     parameter[] @relation(fields: [parameterid], references: [id])
+  methodversions IndexMethodVersion @relation("fk_method_aqi", fields: [methodversionid], references: [id])
+  parameters     parameter          @relation("fk_parameter_aqi_breakpoint", fields: [parameterid], references: [id])
 }
 
 // ============================================================================
 // ALERT SYSTEM TABLES
 // ============================================================================
 
-model alertrule {
-  id                  String    @id @default(uuid())
-  code                String    @unique
-  name                String
-  ruletype            alertruletype
-  parameterid         String?
-  comparisonoperator  String?
-  thresholdvalue      Decimal?
-  severity            alertseverity    @default(HIGH)
-  cooldownminutes     Int          @default(0)
-  isenabled           Boolean       @default(true)
-  createdat           DateTime     @default(now())
+model alertRule {
+  id                 String        @id @default(uuid())
+  code               String        @unique
+  name               String
+  ruletype           alertRuletype
+  parameterid        String?
+  comparisonoperator String?
+  thresholdvalue     Decimal?
+  severity           alertseverity @default(HIGH)
+  cooldownminutes    Int           @default(0)
+  isenabled          Boolean       @default(true)
+  createdat          DateTime      @default(now())
 
-  alerts Alert[]
-}
-
-enum alertruletype {
-  AQI_THRESHOLD
-  POLLUTANT_THRESHOLD
-  WQI_THRESHOLD
-  WATER_PARAMETER_LIMIT
-  SUSPICIOUS_MEASUREMENT
-  STATION_INACTIVE
-}
-
-/// Enum for alert severity levels
-enum alertseverity {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-/// Enum for alert status
-enum alertstatus {
-  OPEN
-  ACKNOWLEDGED
-  RESOLVED
-  SUPPRESSED
+  parameter parameter? @relation(fields: [parameterid], references: [id])
+  alerts    Alert[]     @relation("fk_alert_rule")
 }
 
 /// Alert model
 model Alert {
-  id                 String    @id @default(uuid())
-  ruleid             String
-  stationid          String
-  measurementid      String?
-  indexresultid      String?
-  title              String
-  message            String
-  severity           alertseverity   @default(HIGH)
-  status             alertstatus     @default(OPEN)
-  dedupekey          String    @unique
-  createdat          DateTime     @default(now())
-  acknowledgedat     DateTime?
-  acknowledgedbyuserid String?
-  resolvedat         DateTime?
-  resolvedbyuserid   String?
+  id               String        @id @default(uuid())
+  ruleid           String?
+  stationid        String
+  measurementid    String?
+  indexresultid    String?
+  title            String
+  message          String
+  severity         alertseverity @default(HIGH)
+  status           alertstatus   @default(OPEN)
+  dedupekey        String        @unique
+  createdat        DateTime      @default(now())
+  acknowledgedat   DateTime?
+  resolvedat       DateTime?
+  resolvedbyuserid String?
 
-  rules AlertRule @relation(fields: [ruleid], references: [id])
-  stations   monitoringstation @relation(fields: [stationid], references: [id])
-  measurements     measurement? @relation(fields: [measurementid], references: [id])
-  indexresults     IndexResult? @relation(fields: [indexresultid], references: [id])
+  /// Alert model - User can acknowledge alerts (many-to-many), operator resolves (one-to-many)
+  stations monitoringstation @relation(fields: [stationid], references: [id])
+  rules    alertRule?        @relation("fk_alert_rule", fields: [ruleid], references: [id])
 
-  /// User acknowledged this alert
-  acknowledgedByUser User? @relation("alert_acknowledgedbyuseridToUser", fields: [acknowledgedbyuserid], references: [id])
+  /// Measurement that triggered this alert
+  measurements measurement? @relation("fk_alert_measurement", fields: [measurementid], references: [id])
 
-  /// User resolved this alert
-  resolvedByUser User? @relation("alert_resolvedbyuseridToUser", fields: [resolvedbyuserid], references: [id])
+  /// Index result that triggered this alert
+  indexresults IndexResult? @relation(fields: [indexresultid], references: [id])
+
+  /// User acknowledged this alert (many-to-many relation, opposite of Alert.acknowledgedByUser)
+  acknowledgedByUser User[] @relation("alert_acknowledgedByUser")
+
+  /// Operator resolved this alert (one-to-many, nullable)
+  resolvedByUser User? @relation("alert_resolvedByUser", fields: [resolvedbyuserid], references: [id])
 }
 
 model AuditLog {
@@ -367,72 +394,58 @@ model AuditLog {
   newvalues   Json?
   createdat   DateTime
 
-  actor User? @relation(fields: [actoruserid], references: [id])
+  actors User? @relation(fields: [actoruserid], references: [id])
 }
 
 // ============================================================================
 // MEASUREMENT & INDEX RESULT TABLES
 // ============================================================================
 
-/// Enum for measurement data sources
-enum measurementsource {
-  MANUAL
-  CSV
-  API
-  SENSOR
-}
-
-/// Enum for validation status
-enum validationstatus {
-  ACCEPTED
-  FLAGGED
-  REJECTED
-}
-
 model measurement {
-  id            String  @id @default(uuid())
-  stationid     String
-  parameterid   String
-  value         Decimal
-  measuredat    DateTime
-  source        measurementsource   @default(MANUAL)
-  validationstatus     validationstatus     @default(ACCEPTED)
-  recordedbyuserid    String?
-  batchid             String?
-  sourcerecordid      String?
-  validationnote      String?
-  createdat           DateTime  @default(now())
+  id               String            @id @default(uuid())
+  stationid        String
+  parameterid      String
+  value            Decimal
+  measuredat       DateTime
+  source           measurementsource @default(MANUAL)
+  validationstatus validationstatus  @default(ACCEPTED)
+  recordedbyuserid String?
+  batchid          String?
+  sourcerecordid   String?
+  validationnote   String?
+  createdat        DateTime          @default(now())
 
-  stations     monitoringstation @relation(fields: [stationid], references: [id])
-  parameters   parameter     @relation(fields: [parameterid], references: [id])
+  stations   monitoringstation @relation(fields: [stationid], references: [id])
+  parameters parameter         @relation("fk_parameter_measurement", fields: [parameterid], references: [id])
 
-  /// User recorded this measurement
-  recordedByUser User?   @relation("fk_measurement_user", fields: [recordedbyuserid], references: [id])
+  recordedByUser User? @relation("fk_measurement_user", fields: [recordedbyuserid], references: [id])
+  batch          MeasurementBatch? @relation(fields: [batchid], references: [id])
 
   indexresultmeasurements IndexResultMeasurement[]
-  alerts                  Alert[]
+  alerts                  Alert[]                  @relation("fk_alert_measurement")
 }
 
 /// Index result (computed AQI/WQI value)
 model IndexResult {
-  id               String   @id @default(uuid())
-  stationid        String
-  methodversionid  String
-  parameterid      String?
-  value            Decimal?
-  category         String?
+  id                  String     @id @default(uuid())
+  stationid           String
+  methodversionid     String
+  parameterid         String?
+  value               Decimal?
+  category            String?
   limitingparameterid String?
-  datastatus       datastatus @default(SUFFICIENT)
-  periodstart      DateTime
-  periodend        DateTime
-  calculatedat     DateTime
+  datastatus          datastatus @default(SUFFICIENT)
+  periodstart         DateTime
+  periodend           DateTime
+  calculatedat        DateTime
 
-  stations monitoringstation   @relation(fields: [stationid], references: [id])
-  methodversions IndexMethodVersion   @relation(fields: [methodversionid], references: [id])
-  parameters parameter?        @relation("fk_index_result_limiting_param", fields: [limitingparameterid], references: [id])
+  stations       monitoringstation  @relation(fields: [stationid], references: [id])
+  methodversions IndexMethodVersion @relation(fields: [methodversionid], references: [id])
+  parameters     parameter?         @relation("fk_index_result_limiting_param", fields: [limitingparameterid], references: [id])
 
   indexresultmeasurements IndexResultMeasurement[]
-  alerts Alert[]
+  alerts                  Alert[]
+  indexresultwqiconfigs   WQIParamaterConfigResult[]
 }
 
 /// Junction table for linking measurements to index results (for multi-parameter indices)
@@ -448,17 +461,17 @@ model IndexResultMeasurement {
 
 /// Measurement batch for bulk imports
 model MeasurementBatch {
-  id              String @id @default(uuid())
+  id               String       @id @default(uuid())
   uploadedbyuserid String
-  filename        String
-  status          importstatus   @default(PENDING)
-  totalrows       Int    @default(0)
-  acceptedrows    Int    @default(0)
-  rejectedrows    Int    @default(0)
-  createdat       DateTime      @default(now())
-  completedat     DateTime?
+  filename         String
+  status           importstatus @default(PENDING)
+  totalrows        Int          @default(0)
+  acceptedrows     Int          @default(0)
+  rejectedrows     Int          @default(0)
+  createdat        DateTime     @default(now())
+  completedat      DateTime?
 
-  users        User @relation(fields: [uploadedbyuserid], references: [id])
+  uploaders User @relation(fields: [uploadedbyuserid], references: [id])
   measurements measurement[]
 }
 
@@ -467,7 +480,7 @@ model MeasurementBatch {
 // ============================================================================
 
 model WQiParamaterConfig {
-  id              String @id @default(uuid())
+  id              String  @id @default(uuid())
   methodversionid String
   parameterid     String
   standardvalue   Decimal
@@ -475,39 +488,18 @@ model WQiParamaterConfig {
   weight          Decimal
 
   methodversions IndexMethodVersion @relation("fk_wqi_method", fields: [methodversionid], references: [id])
-  parameters     parameter          @relation(fields: [parameterid], references: [id])
+  parameters     parameter          @relation("fk_parameter_wqiconfig", fields: [parameterid], references: [id])
+
+  indexresultwqiconfigs WQIParamaterConfigResult[]
 }
 
-// ============================================================================
-// ENUM TYPES (These must be placed before model definitions)
-// ============================================================================
+/// Junction table for linking WQI parameter configurations to IndexResults
+model WQIParamaterConfigResult {
+  configid      String
+  indexresultid String
 
-enum datastatus {
-  SUFFICIENT
-  INSUFFICIENT
+  wqiparameterconfigs WQiParamaterConfig @relation(fields: [configid], references: [id])
+  indexresults        IndexResult        @relation(fields: [indexresultid], references: [id])
+
+  @@id([configid, indexresultid])
 }
-
-enum importstatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  PARTIAL
-}
-
-enum parameterdomain {
-  AIR
-  WATER
-}
-
-// ============================================================================
-// CUSTOM FUNCTIONS & TYPES (PostgreSQL-only)
-// ============================================================================
-
-// These are PostgreSQL custom types that would normally be created via:
-// CREATE TYPE alertseverity AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
-// Similar for: alertstatus, indextype, measurementsource, validationstatus
-
-/// Custom function to generate UUID (PostgreSQL-specific)
-// @customEnum('dbgenerated')
-// @customFunction(uuidgen)
