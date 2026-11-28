@@ -93,6 +93,9 @@ export function computeWQI(reading) {
 }
 
 export function getWQICategory(wqi) {
+  if (wqi == null || (typeof wqi === 'string' && wqi.trim() === '')) {
+    return { label: 'Unavailable', min: null, max: null, color: '#64748b', advice: 'WQI is unavailable.' };
+  }
   const safe = Number(wqi) || 0;
   return WQI_SCALE.find((z) => safe >= z.min && safe <= z.max) || WQI_SCALE[WQI_SCALE.length - 1];
 }

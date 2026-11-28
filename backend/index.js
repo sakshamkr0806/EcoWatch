@@ -19,6 +19,7 @@ const authRoutes = require('./routes/auth');
 const stationRoutes = require('./routes/stations');
 const airRoutes = require('./routes/air');
 const waterRoutes = require('./routes/water');
+const measurementRoutes = require('./routes/measurements');
 const alertRoutes = require('./routes/alerts');
 const reportRoutes = require('./routes/reports');
 
@@ -27,6 +28,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/stations', stationRoutes);
 app.use('/api/air', airRoutes);
 app.use('/api/water', waterRoutes);
+app.use('/api/measurements', measurementRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/reports', reportRoutes);
 

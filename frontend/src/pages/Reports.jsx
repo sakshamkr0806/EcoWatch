@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { reportService } from '../services/report.service';
+import { USE_MOCKS } from '../services/api';
 import Card from '../components/common/Card';
 import StatCard from '../components/common/StatCard';
 import Spinner from '../components/common/Spinner';
@@ -22,6 +23,10 @@ const PERIODS = [
 const AQI_COLORS = { Good: '#16a34a', Satisfactory: '#65a30d', Moderate: '#d97706', Poor: '#dc2626', 'Very Poor': '#7c3aed', Severe: '#7f1d1d' };
 const WQI_COLORS = { Excellent: '#0e7490', Good: '#16a34a', Medium: '#d97706', Poor: '#dc2626', 'Very Poor': '#7f1d1d' };
 const FALLBACK_COLORS = ['#16a34a', '#65a30d', '#d97706', '#dc2626', '#7c3aed', '#7f1d1d', '#0e7490'];
+const csvNumeric = (value) => {
+  if (value == null || (typeof value === 'string' && value.trim() === '') || !Number.isFinite(Number(value))) return 'Unavailable';
+  return value;
+};
 
 export default function Reports() {
   const { stations } = useData();
@@ -64,14 +69,20 @@ export default function Reports() {
     ];
     if (report.air) {
       rows.push(['Air quality'], ['Parameter', 'Unit', 'Min', 'Average', 'Max', 'Standard', 'Exceedances']);
-      report.air.stats.forEach((s) => rows.push([s.label, s.unit, s.min, s.avg, s.max, `${s.limit} ${s.unit}`, s.exceedances]));
-      rows.push(['AQI', '', report.air.aqi.min, report.air.aqi.avg, report.air.aqi.max, '500 scale', '']);
+      report.air.stats.forEach((s) => rows.push([
+        s.label, s.unit, csvNumeric(s.min), csvNumeric(s.avg), csvNumeric(s.max),
+        s.limit == null ? 'Unavailable' : `${csvNumeric(s.limit)} ${s.unit || ''}`,
+        csvNumeric(s.exceedances),
+      ]));
+      rows.push(['AQI', '', csvNumeric(report.air.aqi?.min), csvNumeric(report.air.aqi?.avg), csvNumeric(report.air.aqi?.max), '500 scale', '']);
       rows.push([]);
     }
     if (report.water) {
       rows.push(['Water quality'], ['Parameter', 'Unit', 'Min', 'Average', 'Max', 'Ideal']);
-      report.water.stats.forEach((s) => rows.push([s.label, s.unit, s.min, s.avg, s.max, s.ideal]));
-      rows.push(['WQI', '', report.water.wqi.min, report.water.wqi.avg, report.water.wqi.max, '100 scale']);
+      report.water.stats.forEach((s) => rows.push([
+        s.label, s.unit, csvNumeric(s.min), csvNumeric(s.avg), csvNumeric(s.max), csvNumeric(s.ideal),
+      ]));
+      rows.push(['WQI', '', csvNumeric(report.water.wqi?.min), csvNumeric(report.water.wqi?.avg), csvNumeric(report.water.wqi?.max), '100 scale']);
       rows.push([]);
     }
     rows.push(['Alerts', report.alerts.length]);
@@ -148,9 +159,9 @@ export default function Reports() {
           </div>
 
           <div className="grid-4 mt-20">
-            <StatCard icon="wind" tone="green" label="Average AQI" value={report.air ? report.air.aqi.avg : '—'} sub={report.air ? `${report.air.samples} air samples` : 'No air stations'} />
-            <StatCard icon="alert" tone="red" label="Peak AQI" value={report.air ? report.air.aqi.max : '—'} sub={report.air ? getAQICategory(report.air.aqi.max).label : ''} />
-            <StatCard icon="drop" tone="blue" label="Average WQI" value={report.water ? report.water.wqi.avg : '—'} sub={report.water ? `${report.water.samples} water samples` : 'No water stations'} />
+            <StatCard icon="wind" tone="green" label="Average AQI" value={report.air?.aqi?.avg ?? 'Unavailable'} sub={report.air ? `${report.air.samples} air samples` : 'No air stations'} />
+            <StatCard icon="alert" tone="red" label="Peak AQI" value={report.air?.aqi?.max ?? 'Unavailable'} sub={report.air ? getAQICategory(report.air.aqi?.max).label : ''} />
+            <StatCard icon="drop" tone="blue" label="Average WQI" value={report.water?.wqi?.avg ?? 'Unavailable'} sub={report.water ? `${report.water.samples} water samples` : 'No water stations'} />
             <StatCard icon="bell" tone="amber" label="Alerts in period" value={report.alerts.length} sub={`${report.alerts.filter((a) => a.status !== 'RESOLVED').length} still open`} />
           </div>
 
@@ -170,8 +181,10 @@ export default function Reports() {
                         <td>{s.min}</td>
                         <td>{s.avg}</td>
                         <td>{s.max}</td>
-                        <td className="muted">{s.limit} {s.unit}</td>
-                        <td className={s.exceedances > 0 ? 'text-red' : 'text-green'}>{s.exceedances}</td>
+                        <td className="muted">{s.limit == null ? 'Unavailable' : `${s.limit} ${s.unit || ''}`}</td>
+                        <td className={s.exceedances == null ? 'muted' : (s.exceedances > 0 ? 'text-red' : 'text-green')}>
+                          {s.exceedances == null ? 'Unavailable' : s.exceedances}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -200,7 +213,7 @@ export default function Reports() {
                         <td>{s.min}</td>
                         <td>{s.avg}</td>
                         <td>{s.max}</td>
-                        <td className="muted">{s.ideal} {s.unit}</td>
+                        <td className="muted">{s.ideal == null ? 'Unavailable' : `${s.ideal} ${s.unit || ''}`}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -218,7 +231,7 @@ export default function Reports() {
               <ul className="report-alert-list">
                 {report.alerts.map((a) => (
                   <li key={a.id}>
-                    <Icon name={a.type === 'AIR' ? 'wind' : 'drop'} size={14} />
+                    <Icon name={a.type === 'AIR' ? 'wind' : a.type === 'WATER' ? 'drop' : 'alert'} size={14} />
                     <span>{a.message}</span>
                     <span className="muted">{formatDateTime(a.createdAt)}</span>
                   </li>
@@ -228,7 +241,7 @@ export default function Reports() {
           )}
 
           {detailed && report.readings && report.readings.length > 0 && (
-            <Card title="Detailed readings (sampled)" className="mt-20">
+            <Card title="Individual detailed measurements" className="mt-20">
               <div className="table-wrap">
                 <table className="data-table">
                   <thead>
@@ -239,14 +252,10 @@ export default function Reports() {
                   <tbody>
                     {report.readings.map((r) => (
                       <tr key={r.id}>
-                        <td className="muted">{formatDateTime(r.recordedAt)}</td>
+                        <td className="muted">{formatDateTime(r.recordedAt ?? r.timestamp)}</td>
                         <td>{r.kind}</td>
-                        <td>
-                          {r.kind === 'AIR'
-                            ? `PM2.5 ${r.pm25} · PM10 ${r.pm10} · NO₂ ${r.no2} · SO₂ ${r.so2}`
-                            : `pH ${r.ph} · DO ${r.do} · Turb ${r.turbidity} · TDS ${r.tds}`}
-                        </td>
-                        <td><strong>{r.kind === 'AIR' ? r.aqi : r.wqi}</strong></td>
+                        <td>{r.parameterLabel}: {r.value ?? 'Unavailable'}{r.unit ? ` ${r.unit}` : ''}</td>
+                        <td><strong>{(r.kind === 'AIR' ? r.aqi : r.wqi) ?? 'Unavailable'}</strong></td>
                       </tr>
                     ))}
                   </tbody>
@@ -256,9 +265,11 @@ export default function Reports() {
           )}
 
           <p className="disclaimer muted">
-            Indices are calculated from sensor data using simplified CPCB-style breakpoints and a weighted WQI
-            method. This report supports situational awareness only and does not replace laboratory analysis or
-            official environmental advice.
+            {USE_MOCKS
+              ? 'Demo AQI and WQI values come from generated mock data. '
+              : 'AQI and WQI values are persisted results produced by the configured index methods; this report does not recalculate them. '}
+            This report supports situational awareness only and does not replace laboratory analysis or official
+            environmental advice.
           </p>
         </div>
       )}

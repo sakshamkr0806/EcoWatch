@@ -596,15 +596,47 @@ export const mock = {
     // Alerts in the period -------------------------------------------------
     const alerts = ALERTS.filter((a) => new Date(a.createdAt).getTime() >= cutoff && (!station || a.stationId === station.id));
 
-    // Detailed: a downsampled reading table --------------------------------
+    // Detailed reports use one row per measurement, matching the database API.
+    // The mock source groups parameters by sensor timestamp, but those rows are
+    // flattened independently and do not claim to share a sampling event.
     let readings = null;
     if (detailed) {
-      const merged = [
-        ...airReadings.map((r) => ({ ...r, kind: 'AIR' })),
-        ...waterReadings.map((r) => ({ ...r, kind: 'WATER' })),
-      ].sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
-      const step = Math.max(1, Math.ceil(merged.length / 15));
-      readings = merged.filter((_, i) => i % step === 0).slice(0, 15);
+      const stationName = new Map(stations.map((item) => [item.id, item.name]));
+      const airRows = airReadings.flatMap((reading) => Object.keys(POLLUTANTS)
+        .filter((code) => reading[code] != null)
+        .map((code) => ({
+          id: `${reading.id}:${code}`,
+          stationId: reading.stationId,
+          stationName: stationName.get(reading.stationId) || null,
+          recordedAt: reading.recordedAt,
+          timestamp: reading.recordedAt,
+          kind: 'AIR',
+          parameterCode: code,
+          parameterLabel: POLLUTANTS[code].label,
+          value: reading[code],
+          unit: POLLUTANTS[code].unit,
+          aqi: reading.aqi ?? null,
+          wqi: null,
+        })));
+      const waterRows = waterReadings.flatMap((reading) => Object.keys(WATER_PARAMS)
+        .filter((code) => reading[code] != null)
+        .map((code) => ({
+          id: `${reading.id}:${code}`,
+          stationId: reading.stationId,
+          stationName: stationName.get(reading.stationId) || null,
+          recordedAt: reading.recordedAt,
+          timestamp: reading.recordedAt,
+          kind: 'WATER',
+          parameterCode: code,
+          parameterLabel: WATER_PARAMS[code].label,
+          value: reading[code],
+          unit: WATER_PARAMS[code].unit,
+          aqi: null,
+          wqi: reading.wqi ?? null,
+        })));
+      readings = [...airRows, ...waterRows]
+        .sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt) || a.id.localeCompare(b.id))
+        .slice(0, 15);
     }
 
     return {
